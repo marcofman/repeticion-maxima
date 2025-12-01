@@ -1,430 +1,390 @@
+// ==========================================
+// CONFIGURACIÓN DE SUPABASE
+// ==========================================
+const SUPABASE_URL = "https://arwxqomdfquhkneufnnh.supabase.co";
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFyd3hxb21kZnF1aGtuZXVmbm5oIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjIyODc3MjUsImV4cCI6MjA3Nzg2MzcyNX0.ts0LsML3MBHAEptN9xmUdsFZDX7wETbbWvAVhtrtcqc";
 
-// Mock Data for Programs and Exercises (Static Content)
-const PROGRAMS_DATA = {
-    'genesis': {
-        id: 'genesis',
-        name: 'GÉNESIS',
-        description: 'Programa de prueba para principiantes. Fundamentos del movimiento.',
-        image: 'https://images.unsplash.com/photo-1581009146145-b5ef050c2e1e?q=80&w=2070&auto=format&fit=crop',
-        exercises: [
-            { name: 'Sentadilla Goblet', sets: 3, reps: '10-12', image: 'exercise_squat.png' },
-            { name: 'Flexiones', sets: 3, reps: 'AMRAP', image: 'exercise_bench_press.png' },
-            { name: 'Plancha Abdominal', sets: 3, reps: '30s', image: 'exercise_deadlift.png' }
-        ]
-    },
-    'milon_n1': {
-        id: 'milon_n1',
-        name: 'MILON - Nivel 1',
-        description: 'Fuerza y rendimiento general. Construye una base sólida.',
-        image: 'https://images.unsplash.com/photo-1526506118085-60ce8714f8c5?q=80&w=1974&auto=format&fit=crop',
-        exercises: [
-            { name: 'Sentadilla Trasera', sets: 4, reps: '5', image: 'exercise_squat.png' },
-            { name: 'Press Banca', sets: 4, reps: '5', image: 'exercise_bench_press.png' },
-            { name: 'Peso Muerto', sets: 3, reps: '5', image: 'exercise_deadlift.png' }
-        ]
-    },
-    'afrodita_n1': {
-        id: 'afrodita_n1',
-        name: 'AFRODITA - Nivel 1',
-        description: 'Hipertrofia de glúteos y piernas. Enfoque estético y funcional.',
-        image: 'https://images.unsplash.com/photo-1518310383802-640c2de311b2?q=80&w=2070&auto=format&fit=crop',
-        exercises: [
-            { name: 'Hip Thrust', sets: 4, reps: '10-12', image: 'program_afrodita_fitness.png' },
-            { name: 'Sentadilla Búlgara', sets: 3, reps: '12', image: 'exercise_squat.png' },
-            { name: 'Patada de Glúteo', sets: 3, reps: '15', image: 'program_afrodita_fitness.png' }
-        ]
-    }
-};
+// Inicializar cliente
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-// State Management
-const state = {
-    user: JSON.parse(localStorage.getItem('currentUser')) || null,
-    purchases: [], // Will be fetched from Supabase
-    students: JSON.parse(localStorage.getItem('professorStudents')) || [] // Local mock for students
-};
+// Variables Globales
+let currentUser = null;
+let userPurchases = new Set(); // Aquí guardaremos los IDs de los planes comprados
 
-// DOM Elements
-document.addEventListener('DOMContentLoaded', () => {
-    initApp();
+// CORREO DE ADMINISTRADOR (TÚ) - Solo este correo verá el panel de profe
+const ADMIN_EMAIL = "edfmarcoflores@gmail.com"; 
+
+
+// ==========================================
+// 1. INICIALIZACIÓN Y LOGIN
+// ==========================================
+
+window.addEventListener('load', () => {
+    console.log("Sistema Repetición Máxima: Iniciando...");
+    checkSession();
+    setupStoreButtons(); // Prepara los botones de compra para que sean inteligentes
 });
 
-async function initApp() {
-    if (state.user) {
-        await fetchPurchases();
-    }
-    renderHeader();
-    renderMyPrograms();
-    setupEventListeners();
-    checkUrlParams();
-}
-
-function setupEventListeners() {
-    // Buy Buttons
-    document.querySelectorAll('.btn-comprar').forEach(btn => {
-        btn.addEventListener('click', (e) => {
-            const planId = e.target.dataset.planId;
-            handlePurchase(planId);
-        });
-    });
-
-    // Levels Toggle
-    document.querySelectorAll('.levels-toggle').forEach(btn => {
-        btn.addEventListener('click', (e) => {
-            const targetId = e.target.dataset.target;
-            const target = document.querySelector(targetId);
-            target.classList.toggle('hidden');
-        });
-    });
-
-    // Close Fullscreen Button
-    const closeBtn = document.getElementById('close-fullscreen-btn');
-    if (closeBtn) {
-        closeBtn.addEventListener('click', closeFullscreenView);
+async function checkSession() {
+    // Verificar si hay sesión activa
+    const { data: { session } } = await sb.auth.getSession();
+    
+    if (session) {
+        currentUser = session.user;
+        updateUI(true);
+        await loadUserPrograms(); // Cargar compras reales desde la DB
+    } else {
+        updateUI(false);
     }
 }
 
-// --- Supabase Logic ---
-
-async function fetchPurchases() {
-    if (!state.user || !state.user.id) return;
-
-    // Real Supabase Query
-    try {
-        const { data, error } = await sb
-            .from('purchases')
-            .select('plan_id')
-            .eq('user_id', state.user.id);
-
-        if (error) {
-            console.warn('Supabase fetch error (expected if table missing in demo):', error);
-            // Fallback to local storage for demo continuity
-            const localPurchases = JSON.parse(localStorage.getItem(`purchases_${state.user.email}`)) || [];
-            state.purchases = localPurchases;
+function updateUI(isLoggedIn) {
+    const authStatus = document.getElementById('auth-status');
+    // Buscamos si existe el elemento en el HTML (puede que esté oculto en móvil)
+    if (authStatus) {
+        if (isLoggedIn) {
+            // Mostrar parte del correo
+            authStatus.innerHTML = `Hola, <span class="text-accent-vibrant font-bold">${currentUser.email.split('@')[0]}</span>`;
+            authStatus.classList.remove('hidden');
         } else {
-            state.purchases = data.map(p => p.plan_id);
-            // Merge with local for hybrid demo experience
-            const localPurchases = JSON.parse(localStorage.getItem(`purchases_${state.user.email}`)) || [];
-            state.purchases = [...new Set([...state.purchases, ...localPurchases])];
-        }
-    } catch (err) {
-        console.error('Supabase connection failed:', err);
-        // Fallback
-        const localPurchases = JSON.parse(localStorage.getItem(`purchases_${state.user.email}`)) || [];
-        state.purchases = localPurchases;
-        setTimeout(() => dashboard.classList.add('hidden'), 300);
-    }
-
-    function addStudent() {
-        const name = document.getElementById('student-name').value;
-        const email = document.getElementById('student-email').value;
-        const notes = document.getElementById('student-notes').value;
-
-        const newStudent = { id: Date.now(), name, email, notes, date: new Date().toLocaleDateString() };
-        state.students.push(newStudent);
-        localStorage.setItem('professorStudents', JSON.stringify(state.students));
-
-        // Clear form
-        document.getElementById('add-student-form').reset();
-        renderStudentList();
-        alert('Alumno guardado correctamente.');
-    }
-
-    function renderStudentList() {
-        const tbody = document.getElementById('student-list-body');
-        if (state.students.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="4" class="py-4 text-center text-gray-500">No hay alumnos registrados.</td></tr>';
-            return;
-        }
-
-        tbody.innerHTML = state.students.map(s => `
-    <tr class="hover:bg-gray-700/50 transition">
-      <td class="py-3 font-bold text-white">${s.name}</td>
-      <td class="py-3 text-gray-400">${s.email || '-'}</td>
-      <td class="py-3 text-gray-400 truncate max-w-xs">${s.notes}</td>
-      <td class="py-3 text-right">
-        <button onclick="deleteStudent(${s.id})" class="text-red-400 hover:text-red-300 text-xs font-bold uppercase">Eliminar</button>
-      </td>
-    </tr>
-  `).join('');
-    }
-
-    function deleteStudent(id) {
-        if (confirm('¿Eliminar alumno?')) {
-            state.students = state.students.filter(s => s.id !== id);
-            localStorage.setItem('professorStudents', JSON.stringify(state.students));
-            renderStudentList();
+            // Mostrar botón de entrar
+            authStatus.innerHTML = `<button onclick="login()" class="underline hover:text-accent-vibrant font-bold">Iniciar Sesión</button>`;
+            authStatus.classList.remove('hidden');
         }
     }
-
-    // --- Routine Generator Logic ---
-
-    window.generateQuickRoutine = function () {
-        const authors = [
-            {
-                name: "John Meadows (Mountain Dog)",
-                style: "Alta Intensidad / Drop Sets",
-                routine: "1. Press Inclinado con Mancuernas: 3x8 (Drop set en la última)<br>2. Aperturas en Máquina: 3x12 (Estiramiento forzado 10s)<br>3. Sentadilla Hack: 1x20 (Widowmaker)<br>4. Peso Muerto Rumano: 3x10 (Tempo 3-1-1)"
-            },
-            {
-                name: "Mark Rippetoe (Starting Strength)",
-                style: "Fuerza Básica 5x5",
-                routine: "1. Sentadilla Trasera: 3x5<br>2. Press Militar: 3x5<br>3. Power Clean: 5x3<br>4. Dominadas: 3xFallo"
-            },
-            {
-                name: "Louie Simmons (Westside Barbell)",
-                style: "Max Effort / Dynamic Effort",
-                routine: "1. Box Squat (Max Effort): 1RM del día<br>2. Good Mornings: 3x8 (Pesado)<br>3. Reverse Hypers: 4x15<br>4. Trabajo de Tríceps con Bandas: 100 reps total"
-            },
-            {
-                name: "Charles Poliquin",
-                style: "German Volume Training (GVT)",
-                routine: "1. Press Banca: 10x10 (60% 1RM, Tempo 4-0-1-0)<br>2. Dominadas Supinas: 10x10 (Tempo 4-0-1-0)<br>3. Face Pulls: 3x12<br>4. Curl Martillo: 3x10"
-            }
-        ];
-
-        const random = authors[Math.floor(Math.random() * authors.length)];
-
-        const resultDiv = document.getElementById('routine-res');
-        resultDiv.innerHTML = `
-    <div class="bg-slate-800 p-4 rounded-lg border border-slate-600 mt-2 animate-fade-in">
-      <h4 class="text-accent-vibrant font-bold text-lg mb-1">${random.name}</h4>
-      <span class="text-xs font-bold bg-slate-700 px-2 py-1 rounded text-gray-300 mb-3 inline-block">${random.style}</span>
-      <p class="text-sm text-gray-200 leading-relaxed">${random.routine}</p>
-    </div>
-  `;
-    }
-
-    // --- Rendering ---
-
-    const navContent = state.user
-        ? `
-        <div class="flex items-center gap-4">
-            <span class="text-sm text-gray-300 hidden sm:block">Hola, <span class="text-accent-vibrant font-bold">${state.user.name}</span></span>
-            ${state.user.role === 'admin' ? '<button onclick="openDashboard()" class="px-4 py-2 rounded-lg bg-yellow-500 text-black font-bold text-sm hover:bg-yellow-400 transition shadow-lg shadow-yellow-500/20">Panel Profe</button>' : ''}
-            <button onclick="logout()" class="px-4 py-2 rounded-lg border border-slate-600 text-gray-300 hover:text-white hover:border-white transition text-sm font-bold">Salir</button>
-        </div>
-        `
-        : `
-        <button onclick="openAuthModal()" class="px-6 py-2 rounded-lg bg-accent-vibrant text-black font-bold text-sm hover:bg-orange-600 transition shadow-lg shadow-orange-500/20 uppercase tracking-wide">
-            Iniciar Sesión
-        </button>
-        `;
-
-    headerPlaceholder.innerHTML = `
-    <header class="bg-slate-900/90 backdrop-blur-md border-b border-slate-800 sticky top-0 z-50 transition-all duration-300">
-      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between">
-        <div class="flex items-center gap-3 group cursor-pointer" onclick="window.scrollTo(0,0)">
-           <div class="w-10 h-10 bg-gradient-to-br from-accent-vibrant to-orange-600 rounded-lg flex items-center justify-center text-black font-oswald font-bold text-xl shadow-lg shadow-orange-500/20 group-hover:scale-105 transition-transform">RM</div>
-           <div class="flex flex-col">
-             <span class="font-oswald font-bold text-xl tracking-tighter text-white leading-none">REPETICIÓN</span>
-             <span class="font-oswald font-bold text-xl tracking-tighter text-accent-vibrant leading-none">MÁXIMA</span>
-           </div>
-        </div>
-        <nav>
-          ${navContent}
-        </nav>
-      </div>
-    </header>
-  `;
 }
 
-function renderMyPrograms() {
+async function login() {
+    const email = prompt("Ingresa tu correo para iniciar sesión:");
+    if (!email) return;
+    
+    alert("Enviando enlace mágico a tu correo...");
+    const { error } = await sb.auth.signInWithOtp({ email });
+    
+    if (error) {
+        alert("Error: " + error.message);
+    } else {
+        alert("¡Listo! Revisa tu bandeja de entrada (y SPAM) para entrar.");
+    }
+}
+
+
+// ==========================================
+// 2. CARGA DE COMPRAS Y PERMISOS
+// ==========================================
+
+async function loadUserPrograms() {
+    if (!currentUser) return;
+
+    // Consultar tabla 'purchases'
+    const { data: purchases, error } = await sb
+        .from('purchases')
+        .select('plan_id, status')
+        .eq('user_id', currentUser.id);
+
+    if (error) {
+        console.error("Error cargando programas:", error);
+        return;
+    }
+
+    // Guardar los IDs en memoria para consultar rápido después
+    userPurchases.clear();
+    purchases.forEach(p => userPurchases.add(p.plan_id));
+
+    // Mostrar las tarjetas en la sección "Mis Programas"
+    renderMyPrograms(purchases);
+}
+
+function renderMyPrograms(purchases) {
     const grid = document.getElementById('mis-programas-grid');
+    if (!grid) return;
 
-    if (!state.user) {
-        grid.innerHTML = `
-      <div class="col-span-full text-center py-12 bg-slate-800/50 rounded-xl border border-dashed border-slate-700">
-        <p class="text-gray-400 mb-4">Inicia sesión para ver tus programas adquiridos.</p>
-        <button onclick="openAuthModal()" class="px-6 py-2 bg-slate-700 text-white rounded-lg font-bold hover:bg-slate-600">Ingresar</button>
-      </div>
-    `;
-        return;
-    }
+    if (purchases && purchases.length > 0) {
+        grid.innerHTML = ''; // Limpiar mensaje de "vacío"
+        
+        // Diccionario para traducir IDs raros a Nombres Reales
+        // IMPORTANTE: Aquí van tanto los UUIDs reales como los nombres cortos antiguos
+        const planNames = {
+            'milon_n1': 'Milón - Nivel 1',
+            '9ba1907c-01f4-4dc9-9b68-87653e136ea5': 'Milón - Nivel 1', // UUID Real
+            'afrodita_n1': 'Afrodita - Nivel 1',
+            'hercules': 'Hércules',
+            'kronos': 'Kronos',
+            'genesis': 'Génesis (Demo)'
+        };
 
-    if (state.purchases.length === 0) {
-        grid.innerHTML = `
-      <div class="col-span-full text-center py-12 bg-slate-800/50 rounded-xl border border-dashed border-slate-700">
-        <p class="text-gray-400 mb-4">Aún no tienes programas. ¡Explora la tienda!</p>
-        <a href="#programas" class="px-6 py-2 bg-accent-vibrant text-black rounded-lg font-bold hover:bg-orange-600">Ver Catálogo</a>
-      </div>
-    `;
-        return;
-    }
-
-    grid.innerHTML = state.purchases.map(planId => {
-        const program = PROGRAMS_DATA[planId] || { name: planId, description: 'Programa adquirido', image: 'https://images.unsplash.com/photo-1517836357463-d25dfeac3438?q=80&w=2070&auto=format&fit=crop' };
-        const imgSrc = program.image;
-
-        return `
-      <div class="bg-slate-800 rounded-xl shadow-lg overflow-hidden border border-slate-700 flex flex-col group hover:border-accent-vibrant/50 transition-colors">
-        <div class="h-40 relative overflow-hidden">
-           <img src="${imgSrc}" alt="${program.name}" class="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110 opacity-80 group-hover:opacity-100">
-           <div class="absolute inset-0 bg-gradient-to-t from-slate-900 to-transparent"></div>
-        </div>
-        <div class="p-5 flex-1 flex flex-col">
-          <h3 class="font-bold text-lg mb-1 text-white font-oswald tracking-wide">${program.name}</h3>
-          <p class="text-sm text-gray-400 mb-4 flex-1">${program.description}</p>
-          <button onclick="openProgramDetails('${planId}')" class="w-full py-2 rounded-lg bg-white text-black font-bold text-sm hover:bg-gray-200 uppercase tracking-wider">Acceder</button>
-        </div>
-      </div>
-    `;
-    }).join('');
-}
-
-function openProgramDetails(planId) {
-    const program = PROGRAMS_DATA[planId];
-    if (!program) {
-        alert('Detalles no disponibles para este programa.');
-        return;
-    }
-
-    const view = document.getElementById('fullscreen-program-view');
-    const content = document.getElementById('fullscreen-content');
-
-    content.innerHTML = `
-    <div class="animate-fade-in">
-      <div class="flex flex-col md:flex-row gap-8 mb-8">
-        <div class="md:w-1/3">
-           <img src="${program.image}" alt="${program.name}" class="w-full rounded-xl shadow-2xl border border-gray-200/10">
-        </div>
-        <div class="md:w-2/3">
-          <h1 class="text-5xl md:text-6xl font-black font-oswald mb-4 text-primary-dark">${program.name}</h1>
-          <p class="text-xl text-gray-600 mb-6 font-light">${program.description}</p>
-          <div class="flex gap-4">
-             <span class="px-4 py-1 rounded-full bg-primary-dark text-white font-bold text-sm uppercase tracking-wider">Nivel 1</span>
-             <span class="px-4 py-1 rounded-full bg-gray-200 text-gray-800 font-bold text-sm uppercase tracking-wider">4 Semanas</span>
-          </div>
-        </div>
-      </div>
-
-      <div class="border-t border-gray-200 pt-8">
-        <h2 class="text-3xl font-bold font-oswald mb-6 text-primary-dark">Plan de Entrenamiento - Semana 1</h2>
-        <div class="space-y-4">
-          ${program.exercises ? program.exercises.map(ex => `
-            <div class="exercise-item bg-white border border-gray-200 rounded-xl p-4 hover:shadow-lg transition flex gap-4 items-center">
-              <img src="${ex.image}" alt="${ex.name}" class="w-24 h-24 object-cover rounded-lg bg-gray-100">
-              <div class="flex-1">
-                <h4 class="text-xl font-bold text-primary-dark mb-1">${ex.name}</h4>
-                <p class="text-gray-500 text-sm mb-2">Enfoque en técnica y control.</p>
-                <div class="flex gap-3 text-sm text-gray-700">
-                  <span class="bg-gray-100 px-3 py-1 rounded font-mono">Sets: <strong>${ex.sets}</strong></span>
-                  <span class="bg-gray-100 px-3 py-1 rounded font-mono">Reps: <strong>${ex.reps}</strong></span>
+        purchases.forEach(p => {
+            const nombre = planNames[p.plan_id] || 'Programa Exclusivo';
+            
+            const card = document.createElement('div');
+            card.className = "bg-primary-dark text-white p-6 rounded-xl border border-gray-700 flex flex-col justify-between shadow-lg hover:border-accent-vibrant transition-colors";
+            card.innerHTML = `
+                <div>
+                    <h3 class="text-xl font-bold text-accent-vibrant mb-2 font-oswald uppercase">${nombre}</h3>
+                    <p class="text-xs text-gray-400 mb-4">Estado: <span class="text-green-400">Activo</span></p>
                 </div>
-              </div>
-            </div>
-          `).join('') : '<p>Contenido en desarrollo.</p>'}
-        </div>
-      </div>
-    </div>
-  `;
-
-    view.classList.remove('hidden');
-    setTimeout(() => view.classList.add('active'), 10);
-    document.body.style.overflow = 'hidden';
+                <button onclick="openProgramViewer('${p.plan_id}')" class="w-full py-3 bg-white text-black font-bold uppercase text-sm rounded hover:bg-gray-200 transition-colors">
+                    ABRIR PROGRAMA
+                </button>
+            `;
+            grid.appendChild(card);
+        });
+    }
 }
 
-function closeFullscreenView() {
-    const view = document.getElementById('fullscreen-program-view');
-    view.classList.remove('active');
-    setTimeout(() => {
-        view.classList.add('hidden');
-        document.body.style.overflow = '';
-    }, 300);
+
+// ==========================================
+// 3. BOTONES INTELIGENTES (LÓGICA DE TIENDA)
+// ==========================================
+
+function setupStoreButtons() {
+    // Busca todos los botones de compra (los que tienen data-plan-id)
+    const buttons = document.querySelectorAll('button[data-plan-id]');
+    
+    buttons.forEach(btn => {
+        // Clonar para limpiar eventos viejos
+        const newBtn = btn.cloneNode(true);
+        btn.parentNode.replaceChild(newBtn, btn);
+
+        newBtn.addEventListener('click', (e) => {
+            const planId = newBtn.getAttribute('data-plan-id');
+            const planUUID = getUUIDFor(planId); // Convertir si es necesario
+
+            // 1. ¿El usuario está logueado y tiene el plan?
+            if (currentUser && (userPurchases.has(planId) || userPurchases.has(planUUID))) {
+                // SÍ lo tiene -> Abrir visor directamente
+                openProgramViewer(planId);
+            } else {
+                // NO lo tiene -> Mostrar mensaje de venta
+                if(currentUser) {
+                     alert("Aún no tienes acceso a este nivel. ¡Cómpralo para desbloquear!");
+                     // Aquí iría el redirect a MercadoPago en el futuro
+                } else {
+                     alert("Inicia sesión o regístrate para comprar este programa.");
+                     login(); // Abrir login
+                }
+            }
+        });
+    });
 }
 
-// --- Modals ---
+// Ayuda a convertir nombres cortos a UUIDs si usaste UUIDs en la base de datos
+function getUUIDFor(shortId) {
+    const map = {
+        'milon_n1': '9ba1907c-01f4-4dc9-9b68-87653e136ea5',
+        // Puedes agregar más aquí si copias más IDs de Supabase
+    };
+    return map[shortId] || shortId;
+}
+
+
+// ==========================================
+// 4. BITÁCORA DE PROFESOR (DASHBOARD REAL)
+// ==========================================
 
 function openAuthModal() {
-    const html = `
-    <div class="text-center mb-6">
-      <h2 class="text-2xl font-bold font-oswald text-white">Acceso de Usuarios</h2>
-      <p class="text-gray-400 text-sm">Ingresa para ver tus programas</p>
-    </div>
-    
-    <div class="flex gap-2 mb-6 p-1 bg-slate-800 rounded-lg border border-slate-700">
-      <button onclick="switchAuthTab('login')" id="tab-login" class="flex-1 py-2 rounded-md text-sm font-bold bg-slate-600 text-white shadow-sm transition-all">Login</button>
-      <button onclick="switchAuthTab('register')" id="tab-register" class="flex-1 py-2 rounded-md text-sm font-bold text-gray-400 hover:text-white transition-all">Registro</button>
-    </div>
+    if (!currentUser) {
+        alert("Debes iniciar sesión primero para verificar si eres profesor.");
+        login();
+        return;
+    }
 
-    <form id="login-form" class="auth-form space-y-4" onsubmit="event.preventDefault(); login(this.email.value, this.password.value)">
-      <input type="email" name="email" placeholder="Tu correo electrónico" required>
-      <input type="password" name="password" placeholder="Contraseña" required>
-      <button type="submit" class="w-full py-3 rounded-lg bg-accent-vibrant text-black font-bold hover:bg-orange-600 transition uppercase tracking-wide">Entrar</button>
-    </form>
-
-    <form id="register-form" class="auth-form space-y-4 hidden" onsubmit="event.preventDefault(); register(this.name.value, this.email.value, this.password.value)">
-      <input type="text" name="name" placeholder="Nombre completo" required>
-      <input type="email" name="email" placeholder="Tu correo electrónico" required>
-      <input type="password" name="password" placeholder="Crea una contraseña" required>
-      <button type="submit" class="w-full py-3 rounded-lg bg-white text-black font-bold hover:bg-gray-200 transition uppercase tracking-wide">Crear Cuenta</button>
-    </form>
-  `;
-    showModal(html);
-}
-
-function switchAuthTab(tab) {
-    const loginForm = document.getElementById('login-form');
-    const registerForm = document.getElementById('register-form');
-    const tabLogin = document.getElementById('tab-login');
-    const tabRegister = document.getElementById('tab-register');
-
-    if (tab === 'login') {
-        loginForm.classList.remove('hidden');
-        registerForm.classList.add('hidden');
-        tabLogin.classList.add('bg-slate-600', 'text-white');
-        tabLogin.classList.remove('text-gray-400');
-        tabRegister.classList.remove('bg-slate-600', 'text-white');
-        tabRegister.classList.add('text-gray-400');
+    // VERIFICACIÓN DE SEGURIDAD
+    if (currentUser.email === ADMIN_EMAIL) {
+        showTeacherDashboard();
     } else {
-        loginForm.classList.add('hidden');
-        registerForm.classList.remove('hidden');
-        tabRegister.classList.add('bg-slate-600', 'text-white');
-        tabRegister.classList.remove('text-gray-400');
-        tabLogin.classList.remove('bg-slate-600', 'text-white');
-        tabLogin.classList.add('text-gray-400');
+        alert("⛔ ACCESO DENEGADO\nEsta sección es exclusiva para el Profesor Marco Flores.");
     }
 }
 
-function showModal(content) {
-    let modal = document.getElementById('main-modal');
-    if (!modal) {
-        modal = document.createElement('div');
-        modal.id = 'main-modal';
-        modal.className = 'modal-overlay';
-        modal.innerHTML = `
-      <div class="modal-content">
-        <button class="modal-close" onclick="closeModal()">×</button>
-        <div id="modal-body"></div>
-      </div>
+function showTeacherDashboard() {
+    // HTML del Panel de Control
+    const dashboardHTML = `
+    <div id="teacher-dash" class="fixed inset-0 z-[100] bg-gray-900 text-white overflow-y-auto p-6 animate-fade-in">
+        <div class="max-w-6xl mx-auto">
+            <div class="flex justify-between items-center mb-8 pb-4 border-b border-gray-700">
+                <h1 class="text-3xl font-oswald text-accent-vibrant uppercase">PANEL DE CONTROL - PROFESOR</h1>
+                <button onclick="document.getElementById('teacher-dash').remove()" class="bg-red-600 hover:bg-red-700 px-6 py-2 rounded font-bold transition">CERRAR</button>
+            </div>
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                <!-- Sección Alumnos -->
+                <div class="bg-black p-6 rounded-xl border border-gray-800">
+                    <h3 class="text-xl font-bold mb-4 flex items-center gap-2">👥 Gestión de Alumnos</h3>
+                    <p class="text-gray-400 text-sm mb-4">Lista de alumnos registrados en la plataforma.</p>
+                    
+                    <div class="bg-gray-800 rounded p-4 h-64 overflow-y-auto">
+                        <p class="text-gray-500 text-sm text-center italic mt-10">Conectando con Supabase para traer lista...</p>
+                        <!-- Aquí podrías inyectar la lista real con otra función -->
+                    </div>
+                    <button class="mt-4 w-full border border-accent-vibrant text-accent-vibrant py-2 rounded hover:bg-accent-vibrant hover:text-black font-bold transition">
+                        + Agregar Nuevo Alumno
+                    </button>
+                </div>
+
+                <!-- Sección Notas -->
+                <div class="bg-black p-6 rounded-xl border border-gray-800">
+                    <h3 class="text-xl font-bold mb-4 flex items-center gap-2">📝 Notas Rápidas</h3>
+                    <textarea class="w-full h-40 bg-gray-900 border border-gray-700 p-4 rounded text-white focus:outline-none focus:border-accent-vibrant" placeholder="Escribe recordatorios o pendientes aquí..."></textarea>
+                    <button class="mt-4 bg-accent-vibrant text-black font-bold py-2 px-4 rounded w-full hover:bg-orange-600 transition">
+                        GUARDAR NOTA
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
     `;
-        document.body.appendChild(modal);
-        modal.addEventListener('click', (e) => {
-            if (e.target === modal) closeModal();
-        });
+    document.body.insertAdjacentHTML('beforeend', dashboardHTML);
+}
+
+
+// ==========================================
+// 5. VISOR FULL SCREEN (Pantalla Completa)
+// ==========================================
+
+function openProgramViewer(planId) {
+    // Muestra el contenido del programa en grande
+    const viewerHTML = `
+    <div id="program-viewer" class="fixed inset-0 z-[100] bg-black text-white overflow-y-auto animate-fade-in">
+        <div class="max-w-5xl mx-auto min-h-screen bg-gray-900 relative border-x border-gray-800 shadow-2xl">
+            
+            <!-- Barra Superior -->
+            <div class="sticky top-0 bg-black/95 backdrop-blur-md p-4 border-b border-gray-800 flex justify-between items-center z-50">
+                <h2 class="text-xl font-oswald text-accent-vibrant uppercase tracking-wider">ENTRENAMIENTO: ${planId.toUpperCase().replace('_',' ')}</h2>
+                <button onclick="document.getElementById('program-viewer').remove(); document.body.style.overflow='';" class="px-4 py-2 bg-white text-black font-bold text-xs rounded hover:bg-gray-300 transition-colors uppercase">
+                    ✕ Cerrar
+                </button>
+            </div>
+
+            <!-- Contenido -->
+            <div class="p-6 md:p-12 space-y-12">
+                <!-- Bienvenida -->
+                <div class="bg-gradient-to-r from-gray-800 to-gray-900 p-8 rounded-2xl border-l-4 border-accent-vibrant shadow-lg">
+                    <h1 class="text-3xl md:text-5xl font-bold mb-3 font-oswald uppercase text-white">Fase 1: Construcción</h1>
+                    <p class="text-gray-300 text-lg">Enfócate en la técnica perfecta y controla la fase excéntrica (bajada). RIR 2-3 en todas las series.</p>
+                </div>
+
+                <!-- Ejemplo de Rutina -->
+                <div>
+                    <h3 class="text-2xl font-oswald uppercase text-white border-b border-gray-700 pb-2 mb-6">Día 1: Torso / Empuje</h3>
+                    
+                    <div class="space-y-4">
+                        <!-- Ejercicio -->
+                        <div class="bg-black p-5 rounded-xl flex flex-col md:flex-row items-start md:items-center gap-6 border border-gray-800 hover:border-accent-vibrant transition-all group">
+                            <div class="w-20 h-20 bg-gray-800 rounded-lg flex items-center justify-center text-xs text-gray-500 font-mono group-hover:text-white">VIDEO</div>
+                            <div class="flex-1">
+                                <h4 class="font-bold text-xl text-white mb-1">Press Banca con Barra</h4>
+                                <p class="text-sm text-gray-400">Retrae escápulas. Baja controlado al pecho.</p>
+                            </div>
+                            <div class="bg-gray-900 px-6 py-3 rounded border border-gray-700 text-center min-w-[140px]">
+                                <span class="block text-accent-vibrant font-bold text-2xl font-oswald">3 x 8-10</span>
+                                <span class="text-[10px] text-gray-500 uppercase tracking-widest">Series x Reps</span>
+                            </div>
+                        </div>
+
+                         <!-- Ejercicio -->
+                        <div class="bg-black p-5 rounded-xl flex flex-col md:flex-row items-start md:items-center gap-6 border border-gray-800 hover:border-accent-vibrant transition-all group">
+                            <div class="w-20 h-20 bg-gray-800 rounded-lg flex items-center justify-center text-xs text-gray-500 font-mono group-hover:text-white">VIDEO</div>
+                            <div class="flex-1">
+                                <h4 class="font-bold text-xl text-white mb-1">Press Militar Mancuernas</h4>
+                                <p class="text-sm text-gray-400">Sentado. Espalda recta. Rango completo.</p>
+                            </div>
+                            <div class="bg-gray-900 px-6 py-3 rounded border border-gray-700 text-center min-w-[140px]">
+                                <span class="block text-accent-vibrant font-bold text-2xl font-oswald">3 x 10-12</span>
+                                <span class="text-[10px] text-gray-500 uppercase tracking-widest">Series x Reps</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    `;
+    document.body.insertAdjacentHTML('beforeend', viewerHTML);
+    document.body.style.overflow = 'hidden'; // Bloquear scroll de la web principal
+}
+
+
+// ==========================================
+// 6. GENERADOR DE RUTINAS & HERRAMIENTAS
+// ==========================================
+
+function generateQuickRoutine() {
+    // Autores variados
+    const authors = [
+        {
+            name: "Estilo John Meadows (Mountain Dog)",
+            desc: "Alta intensidad, pre-activación y ejercicios de estiramiento bajo carga.",
+            routine: "1. Curl Femoral (Drop set 12/8/20)<br>2. Sentadilla Hack (3x8 bajando lento)<br>3. Prensa (3x15 pies juntos)<br>4. Zancadas (2 sets al fallo)"
+        },
+        {
+            name: "Estilo Mark Rippetoe (Starting Strength)",
+            desc: "Básicos pesados. 5 repeticiones. Fuerza bruta.",
+            routine: "1. Sentadilla (3x5)<br>2. Press Militar (3x5)<br>3. Peso Muerto (1x5)<br>Descanso: 3-5 min entre series."
+        },
+        {
+            name: "Estilo Louie Simmons (Westside)",
+            desc: "Método conjugado. Día de esfuerzo máximo.",
+            routine: "1. Box Squat (Buscar 1RM)<br>2. Buenos Días (3x8 pesado)<br>3. Extensiones de Tríceps (4x15)<br>4. Trabajo de Abdomen pesado."
+        },
+        {
+            name: "Estilo Charles Poliquin (GVT)",
+            desc: "Entrenamiento Alemán de Volumen. Acumulación pura.",
+            routine: "1. Sentadilla (10 series x 10 repeticiones)<br>2. Curl Femoral (10 series x 10 repeticiones)<br>Tempo: 4-0-2-0."
+        }
+    ];
+
+    const random = Math.floor(Math.random() * authors.length);
+    const selected = authors[random];
+
+    const resultBox = document.getElementById('routine-res');
+    resultBox.innerHTML = `
+        <div class="border-l-4 border-accent-vibrant pl-4 py-2 bg-white/50 rounded">
+            <strong class="text-accent-vibrant block text-lg font-oswald uppercase mb-1">${selected.name}</strong>
+            <p class="text-xs text-gray-600 italic mb-3 border-b border-gray-200 pb-2">${selected.desc}</p>
+            <div class="text-sm font-medium text-gray-800 leading-relaxed">
+                ${selected.routine}
+            </div>
+        </div>
+    `;
+    resultBox.classList.remove('hidden');
+}
+
+function calc1RM() {
+    const peso = parseFloat(document.getElementById('rm-peso').value);
+    const reps = parseFloat(document.getElementById('rm-reps').value);
+    const resDiv = document.getElementById('rm-res');
+
+    if (!peso || !reps) {
+        resDiv.innerHTML = "<span class='text-red-500 font-bold text-xs'>Ingresa peso y reps.</span>";
+        resDiv.classList.remove('hidden');
+        return;
     }
 
-    document.getElementById('modal-body').innerHTML = content;
-    setTimeout(() => modal.classList.add('active'), 10);
+    // Fórmula Epley
+    const rm = Math.round(peso * (1 + reps / 30));
+    
+    resDiv.innerHTML = `
+        <div class="mt-4 text-center bg-gray-100 p-3 rounded border border-gray-200">
+            <p class="text-[10px] text-gray-500 uppercase font-bold tracking-widest mb-1">Tu 1RM Estimado</p>
+            <p class="text-4xl font-bold text-accent-vibrant font-oswald">${rm} <span class="text-lg text-gray-600">kg</span></p>
+        </div>
+    `;
+    resDiv.classList.remove('hidden');
 }
 
-function closeModal() {
-    const modal = document.getElementById('main-modal');
-    if (modal) {
-        modal.classList.remove('active');
-    }
+function handleFormSubmit(e) {
+    e.preventDefault();
+    const btn = e.target.querySelector('button');
+    const originalText = btn.innerText;
+    
+    btn.innerText = "ENVIANDO...";
+    btn.disabled = true;
+    
+    setTimeout(() => {
+        alert("¡Mensaje recibido! Te escribiré al WhatsApp pronto.");
+        e.target.reset();
+        btn.innerText = originalText;
+        btn.disabled = false;
+    }, 1500);
 }
-
-// Global helpers
-window.calc1RM = function () {
-    const w = parseFloat(document.getElementById('rm-peso').value);
-    const r = parseInt(document.getElementById('rm-reps').value);
-    if (!w || !r) return;
-    const rm = Math.round(w * (1 + r / 30));
-    document.getElementById('rm-res').innerHTML = `Tu 1RM estimado es: <strong class="text-accent-vibrant text-lg">${rm} kg</strong>`;
-}
-
-window.openAuthModal = openAuthModal;
-window.openDashboard = openDashboard;
-window.closeDashboard = closeDashboard;
-window.addStudent = addStudent;
-window.deleteStudent = deleteStudent;
