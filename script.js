@@ -14,7 +14,7 @@ const ADMIN_EMAIL = "edfmarcoflores@gmail.com";
 // BASE DE DATOS DE CONTENIDO (TUS RUTINAS)
 // ==========================================
 const PROGRAM_CONTENT = {
-    // --- MILÓN NIVEL 1 (Tu bosquejo base) ---
+    // --- MILÓN NIVEL 1 ---
     'milon_n1': {
         title: "Milón - Nivel 1: Fundamentos",
         phase: "Fase 1: Adaptación Anatómica",
@@ -41,7 +41,7 @@ const PROGRAM_CONTENT = {
         ]
     },
 
-    // --- MILÓN NIVEL 2 (CREADO AHORA) ---
+    // --- MILÓN NIVEL 2 ---
     'milon_n2': {
         title: "Milón - Nivel 2: Hipertrofia Base",
         phase: "Fase 2: Acumulación",
@@ -77,7 +77,7 @@ const PROGRAM_CONTENT = {
         ]
     },
 
-    // --- MILÓN NIVEL 4 (Ejemplo anterior) ---
+    // --- MILÓN NIVEL 4 ---
     'milon_n4': {
         title: "Milón - Nivel 4: Intensificación",
         phase: "Fase 4: Fuerza Mixta",
@@ -109,7 +109,7 @@ const PROGRAM_CONTENT = {
         ]
     },
     
-    // Mapeo de IDs reales de Supabase (UUIDs) a nuestras claves de texto
+    // UUIDs DE COMPATIBILIDAD
     '9ba1907c-01f4-4dc9-9b68-87653e136ea5': 'milon_n1' 
 };
 
@@ -156,12 +156,38 @@ async function login() {
 }
 
 // ==========================================
-// 2. CARGA DE COMPRAS
+// 2. CARGA DE COMPRAS (MODO DIOS AGREGADO)
 // ==========================================
 
 async function loadUserPrograms() {
     if (!currentUser) return;
 
+    // --- MODO DIOS (ADMIN) ---
+    // Si eres tú, te damos acceso a TODO automáticamente
+    if (currentUser.email === ADMIN_EMAIL) {
+        console.log("👑 Modo Admin activado: Acceso total.");
+        userPurchases.clear();
+        
+        const allProgramsForGrid = [];
+
+        // Recorremos todos los programas que existen en el código
+        for (const [key, value] of Object.entries(PROGRAM_CONTENT)) {
+            // 1. Te damos permiso para abrirlo (agregamos el ID a la lista segura)
+            userPurchases.add(key);
+
+            // 2. Si es un programa real (no un UUID repetido), lo agregamos a tu grilla visual
+            if (typeof value === 'object') {
+                allProgramsForGrid.push({ plan_id: key, status: 'Admin' });
+            }
+        }
+        
+        // Mostramos todo en tu pantalla
+        renderMyPrograms(allProgramsForGrid);
+        return; // Salimos aquí, no necesitamos consultar a Supabase
+    }
+
+    // --- USUARIOS NORMALES ---
+    // Consultar tabla 'purchases'
     const { data: purchases, error } = await sb
         .from('purchases')
         .select('plan_id, status')
@@ -182,9 +208,7 @@ function renderMyPrograms(purchases) {
         grid.innerHTML = ''; 
         
         purchases.forEach(p => {
-            // Lógica de mapeo UUID -> Texto
             let contentKey = p.plan_id;
-            // Si el ID es un UUID y lo tenemos mapeado, usamos la clave corta
             if (PROGRAM_CONTENT[p.plan_id] && typeof PROGRAM_CONTENT[p.plan_id] === 'string') {
                 contentKey = PROGRAM_CONTENT[p.plan_id]; 
             }
@@ -220,9 +244,9 @@ function setupStoreButtons() {
 
         newBtn.addEventListener('click', (e) => {
             const planId = newBtn.getAttribute('data-plan-id');
-            // Mapeo simple
             const realId = planId; 
 
+            // Verificamos si tiene el permiso (El admin ahora siempre tendrá 'true' aquí)
             if (currentUser && userPurchases.has(realId)) {
                 openProgramViewer(realId);
             } else {
@@ -303,7 +327,22 @@ function openProgramViewer(planId) {
 function openAuthModal() {
     if (!currentUser) { login(); return; }
     if (currentUser.email === ADMIN_EMAIL) {
-        const dashHTML = `<div id="teacher-dash" class="fixed inset-0 z-[100] bg-gray-900 text-white p-10"><h1 class="text-3xl">Panel Profe</h1><button onclick="this.parentElement.remove()" class="bg-red-500 p-2 mt-4">Cerrar</button></div>`;
+        // PANEL DE PROFESOR SIMPLE
+        const dashHTML = `
+        <div id="teacher-dash" class="fixed inset-0 z-[100] bg-gray-900 text-white p-10 overflow-y-auto">
+            <div class="max-w-4xl mx-auto">
+                <div class="flex justify-between items-center mb-6">
+                    <h1 class="text-3xl font-oswald text-accent-vibrant">PANEL DE PROFESOR</h1>
+                    <button onclick="this.parentElement.parentElement.parentElement.remove()" class="bg-red-500 px-4 py-2 rounded font-bold">Cerrar</button>
+                </div>
+                <div class="bg-black p-6 rounded-xl border border-gray-800">
+                    <p class="text-gray-300 mb-4">Bienvenido, Marco. Aquí puedes gestionar tus alumnos.</p>
+                    <a href="https://supabase.com/dashboard/project/arwxqomdfquhkneufnnh/editor/29674" target="_blank" class="block w-full text-center bg-gray-800 hover:bg-gray-700 p-4 rounded text-white font-bold border border-gray-600">
+                        🔗 Ir a Base de Datos de Alumnos (Supabase)
+                    </a>
+                </div>
+            </div>
+        </div>`;
         document.body.insertAdjacentHTML('beforeend', dashHTML);
     } else {
         alert("⛔ Acceso Denegado");
