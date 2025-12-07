@@ -1,368 +1,476 @@
-// ==========================================
-// CONFIGURACIÓN DE SUPABASE
-// ==========================================
-const SUPABASE_URL = "https://arwxqomdfquhkneufnnh.supabase.co";
-const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFyd3hxb21kZnF1aGtuZXVmbm5oIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjIyODc3MjUsImV4cCI6MjA3Nzg2MzcyNX0.ts0LsML3MBHAEptN9xmUdsFZDX7wETbbWvAVhtrtcqc";
 
-const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-
-let currentUser = null;
-let userPurchases = new Set();
-const ADMIN_EMAIL = "edfmarcoflores@gmail.com"; 
-
-// ==========================================
-// BASE DE DATOS DE CONTENIDO (TUS RUTINAS)
-// ==========================================
-const PROGRAM_CONTENT = {
-    // --- MILÓN NIVEL 1 ---
-    'milon_n1': {
-        title: "Milón - Nivel 1: Fundamentos",
-        phase: "Fase 1: Adaptación Anatómica",
-        desc: "Construyendo la base. Enfócate en aprender los patrones de movimiento y fortalecer tendones. Tempo: 3-0-1-0.",
-        days: [
-            {
-                name: "Día 1: Full Body A",
-                exercises: [
-                    { name: "Sentadilla Goblet", sets: "3", reps: "10-12", note: "Baja en 3 segundos. Pecho arriba." },
-                    { name: "Press Banca Mancuernas", sets: "3", reps: "10-12", note: "Rango completo." },
-                    { name: "Remo con Mancuerna", sets: "3", reps: "10-12", note: "Apóyate en banco." },
-                    { name: "Plancha Abdominal", sets: "3", reps: "30s", note: "Aprieta glúteos." }
-                ]
-            },
-            {
-                name: "Día 2: Full Body B",
-                exercises: [
-                    { name: "Peso Muerto Rumano (Mancuernas)", sets: "3", reps: "10-12", note: "Siente el estiramiento isquio." },
-                    { name: "Press Militar Sentado", sets: "3", reps: "10-12", note: "Sin arquear espalda." },
-                    { name: "Jalón al Pecho", sets: "3", reps: "10-12", note: "Codos hacia abajo." },
-                    { name: "Zancadas", sets: "2", reps: "10/lado", note: "Paso controlado." }
-                ]
-            }
-        ]
-    },
-
-    // --- MILÓN NIVEL 2 ---
-    'milon_n2': {
-        title: "Milón - Nivel 2: Hipertrofia Base",
-        phase: "Fase 2: Acumulación",
-        desc: "Aumentamos el volumen y la complejidad. El objetivo es generar fatiga muscular controlada (RIR 2).",
-        days: [
-            {
-                name: "Día 1: Tren Inferior (Enfoque Cuádriceps)",
-                exercises: [
-                    { name: "Sentadilla Trasera", sets: "4", reps: "8-10", note: "Barra alta o baja según comodidad." },
-                    { name: "Prensa 45º", sets: "3", reps: "12-15", note: "Pies ancho de hombros. Rango completo." },
-                    { name: "Zancadas Estáticas", sets: "3", reps: "10/pierna", note: "Torso vertical." },
-                    { name: "Extensiones de Cuádriceps", sets: "3", reps: "15-20", note: "Aguanta 1 segundo arriba." }
-                ]
-            },
-            {
-                name: "Día 2: Tren Superior (Empuje + Tracción)",
-                exercises: [
-                    { name: "Press Banca Plano (Barra)", sets: "4", reps: "8-10", note: "Retrae escápulas." },
-                    { name: "Remo con Barra (Pendlay)", sets: "4", reps: "8-10", note: "Torso paralelo al suelo." },
-                    { name: "Press Militar Mancuernas", sets: "3", reps: "10-12", note: "Sentado o de pie." },
-                    { name: "Dominadas (o Jalón)", sets: "3", reps: "Al fallo - 1", note: "Controla la bajada." }
-                ]
-            },
-            {
-                name: "Día 3: Tren Inferior (Enfoque Cadena Posterior)",
-                exercises: [
-                    { name: "Peso Muerto Convencional", sets: "3", reps: "6-8", note: "Técnica perfecta. Reset en cada rep." },
-                    { name: "Hip Thrust", sets: "4", reps: "10-12", note: "Pausa de 2 segundos arriba." },
-                    { name: "Curl Femoral Tumbado", sets: "3", reps: "12-15", note: "No levantes la cadera del banco." },
-                    { name: "Pantorrilla de Pie", sets: "4", reps: "15-20", note: "Rango máximo." }
-                ]
-            }
-        ]
-    },
-
-    // --- MILÓN NIVEL 4 ---
-    'milon_n4': {
-        title: "Milón - Nivel 4: Intensificación",
-        phase: "Fase 4: Fuerza Mixta",
-        desc: "Cargas altas, descansos largos. Prioridad: Mover kilos.",
-        days: [
-            {
-                name: "Día 1: Fuerza Máxima",
-                exercises: [
-                    { name: "Sentadilla Low Bar", sets: "5", reps: "3-5", note: "Descansa 3-5 min." },
-                    { name: "Press Banca Competición", sets: "5", reps: "3-5", note: "Pausa en el pecho." }
-                ]
-            }
-        ]
-    },
-
-    // --- AFRODITA NIVEL 1 ---
-    'afrodita_n1': {
-        title: "Afrodita - Nivel 1: Activación",
-        phase: "Fase 1: Glúteo Despierto",
-        desc: "Conexión mente-músculo. Aprende a usar la cadera.",
-        days: [
-            {
-                name: "Día 1: Glúteo Pump",
-                exercises: [
-                    { name: "Glute Bridge", sets: "3", reps: "15-20", note: "Aguanta arriba." },
-                    { name: "Clamshells", sets: "3", reps: "15/lado", note: "Con banda elástica." }
-                ]
-            }
-        ]
-    },
-    
-    // UUIDs DE COMPATIBILIDAD
-    '9ba1907c-01f4-4dc9-9b68-87653e136ea5': 'milon_n1' 
+// Mock Data for Programs and Exercises
+const PROGRAMS_DATA = {
+  // --- GÉNESIS ---
+  'genesis': {
+    id: 'genesis',
+    name: 'GÉNESIS',
+    description: 'Fundamentos del movimiento. Ideal para comenzar.',
+    image: 'program_genesis.png',
+    externalUrl: '../Genesis/genesis_n1.html',
+    theme: 'genesis'
+  },
+  // --- MILON (Fuerza) ---
+  'milon_n1': {
+    id: 'milon_n1',
+    name: 'MILON - Nivel 1',
+    description: 'Construcción de base sólida. Fuerza y técnica.',
+    image: 'program_milon_strength.png',
+    externalUrl: '../Milon/milon_n1.html',
+    theme: 'milon'
+  },
+  'milon_n2': {
+    id: 'milon_n2',
+    name: 'MILON - Nivel 2',
+    description: 'Intensificación. Aumenta la carga y el volumen.',
+    image: 'program_milon_strength.png',
+    externalUrl: '../Milon/milon_n2.html',
+    theme: 'milon'
+  },
+  'milon_n3': {
+    id: 'milon_n3',
+    name: 'MILON - Nivel 3',
+    description: 'Fuerza Pura. Rangos de repeticiones más bajos.',
+    image: 'program_milon_strength.png',
+    externalUrl: '../Milon/milon_n3.html',
+    theme: 'milon'
+  },
+  'milon_n4': {
+    id: 'milon_n4',
+    name: 'MILON - Nivel 4',
+    description: 'Peaking. Maximiza tu rendimiento.',
+    image: 'program_milon_strength.png',
+    externalUrl: '../Milon/milon_n4.html',
+    theme: 'milon'
+  },
+  // --- AFRODITA (Estética) ---
+  'afrodita_n1': {
+    id: 'afrodita_n1',
+    name: 'AFRODITA - Nivel 1',
+    description: 'Activación de glúteos y piernas. Foco técnico.',
+    image: 'program_afrodita_fitness.png',
+    externalUrl: '../Afrodita/afrodita_n1.html',
+    theme: 'afrodita'
+  },
+  'afrodita_n2': {
+    id: 'afrodita_n2',
+    name: 'AFRODITA - Nivel 2',
+    description: 'Hipertrofia. Volumen moderado, alta tensión.',
+    image: 'program_afrodita_fitness.png',
+    externalUrl: '../Afrodita/afrodita_n2.html',
+    theme: 'afrodita'
+  },
+  'afrodita_n3': {
+    id: 'afrodita_n3',
+    name: 'AFRODITA - Nivel 3',
+    description: 'Metabólico. Densidad de entrenamiento aumentada.',
+    image: 'program_afrodita_fitness.png',
+    externalUrl: '../Afrodita/afrodita_n3.html',
+    theme: 'afrodita'
+  },
+  'afrodita_n4': {
+    id: 'afrodita_n4',
+    name: 'AFRODITA - Nivel 4',
+    description: 'Definición y detalle. Alta intensidad.',
+    image: 'program_afrodita_fitness.png',
+    externalUrl: '../Afrodita/afrodita_n4.html',
+    theme: 'afrodita'
+  },
+  // --- OTROS ---
+  'hercules': {
+    id: 'hercules',
+    name: 'HÉRCULES',
+    description: 'Powerlifting y Fuerza Máxima. Periodización avanzada.',
+    image: 'program_hercules.png',
+    externalUrl: '../Hercules/hercules_n1.html',
+    theme: 'gold'
+  },
+  'kronos': {
+    id: 'kronos',
+    name: 'KRONOS',
+    description: 'Longevidad y funcionalidad para +60.',
+    image: 'program_kronos.png',
+    externalUrl: '#', // Placeholder
+    theme: 'gold'
+  },
+  'hermes': {
+    id: 'hermes',
+    name: 'HERMES',
+    description: 'Entrenamiento Express 30 min.',
+    image: 'program_hermes.png',
+    externalUrl: '#', // Placeholder
+    theme: 'genesis'
+  }
 };
 
-// ==========================================
-// 1. INICIALIZACIÓN
-// ==========================================
+// State Management
+const state = {
+  user: JSON.parse(localStorage.getItem('currentUser')) || null,
+  purchases: JSON.parse(localStorage.getItem('userPurchases')) || []
+};
 
-window.addEventListener('load', () => {
-    checkSession();
-    setupStoreButtons(); 
+// DOM Elements
+document.addEventListener('DOMContentLoaded', () => {
+  initApp();
 });
 
-async function checkSession() {
-    const { data: { session } } = await sb.auth.getSession();
-    if (session) {
-        currentUser = session.user;
-        updateUI(true);
-        await loadUserPrograms(); 
-    } else {
-        updateUI(false);
-    }
+function initApp() {
+  renderHeader();
+  renderMyPrograms();
+  setupEventListeners();
+  checkUrlParams();
 }
 
-function updateUI(isLoggedIn) {
-    const authStatus = document.getElementById('auth-status');
-    if (authStatus) {
-        if (isLoggedIn) {
-            authStatus.innerHTML = `Hola, <span class="text-accent-vibrant font-bold">${currentUser.email.split('@')[0]}</span>`;
-            authStatus.classList.remove('hidden');
+function checkUrlParams() {
+  // Basic check if we need to open a specific modal or section
+  const hash = window.location.hash;
+  if (hash === '#mis-programas' && state.user) {
+    document.getElementById('mis-programas').scrollIntoView();
+  }
+}
+
+function setupEventListeners() {
+  // Buy Buttons
+  document.querySelectorAll('.btn-comprar').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      const planId = e.target.dataset.planId;
+      handlePurchase(planId);
+    });
+  });
+
+  // Levels Toggle
+  document.querySelectorAll('.levels-toggle').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      const targetId = e.target.dataset.target;
+      const target = document.querySelector(targetId);
+      if (target) {
+        target.classList.toggle('hidden');
+        if (target.style.display === 'none' || !target.style.display) {
+          target.style.display = 'block';
         } else {
-            authStatus.innerHTML = `<button onclick="login()" class="underline hover:text-accent-vibrant font-bold">Iniciar Sesión</button>`;
-            authStatus.classList.remove('hidden');
+          target.style.display = 'none';
         }
-    }
-}
-
-async function login() {
-    const email = prompt("Ingresa tu correo para iniciar sesión:");
-    if (!email) return;
-    alert("Enviando enlace mágico...");
-    const { error } = await sb.auth.signInWithOtp({ email });
-    if (error) alert("Error: " + error.message);
-    else alert("Revisa tu correo para entrar.");
-}
-
-// ==========================================
-// 2. CARGA DE COMPRAS (MODO DIOS AGREGADO)
-// ==========================================
-
-async function loadUserPrograms() {
-    if (!currentUser) return;
-
-    // --- MODO DIOS (ADMIN) ---
-    // Si eres tú, te damos acceso a TODO automáticamente
-    if (currentUser.email === ADMIN_EMAIL) {
-        console.log("👑 Modo Admin activado: Acceso total.");
-        userPurchases.clear();
-        
-        const allProgramsForGrid = [];
-
-        // Recorremos todos los programas que existen en el código
-        for (const [key, value] of Object.entries(PROGRAM_CONTENT)) {
-            // 1. Te damos permiso para abrirlo (agregamos el ID a la lista segura)
-            userPurchases.add(key);
-
-            // 2. Si es un programa real (no un UUID repetido), lo agregamos a tu grilla visual
-            if (typeof value === 'object') {
-                allProgramsForGrid.push({ plan_id: key, status: 'Admin' });
-            }
-        }
-        
-        // Mostramos todo en tu pantalla
-        renderMyPrograms(allProgramsForGrid);
-        return; // Salimos aquí, no necesitamos consultar a Supabase
-    }
-
-    // --- USUARIOS NORMALES ---
-    // Consultar tabla 'purchases'
-    const { data: purchases, error } = await sb
-        .from('purchases')
-        .select('plan_id, status')
-        .eq('user_id', currentUser.id);
-
-    if (error) { console.error(error); return; }
-
-    userPurchases.clear();
-    purchases.forEach(p => userPurchases.add(p.plan_id));
-    renderMyPrograms(purchases);
-}
-
-function renderMyPrograms(purchases) {
-    const grid = document.getElementById('mis-programas-grid');
-    if (!grid) return;
-
-    if (purchases && purchases.length > 0) {
-        grid.innerHTML = ''; 
-        
-        purchases.forEach(p => {
-            let contentKey = p.plan_id;
-            if (PROGRAM_CONTENT[p.plan_id] && typeof PROGRAM_CONTENT[p.plan_id] === 'string') {
-                contentKey = PROGRAM_CONTENT[p.plan_id]; 
-            }
-
-            const content = PROGRAM_CONTENT[contentKey];
-            const nombre = content ? content.title : 'Programa Exclusivo';
-            
-            const card = document.createElement('div');
-            card.className = "bg-primary-dark text-white p-6 rounded-xl border border-gray-700 flex flex-col justify-between shadow-lg hover:border-accent-vibrant transition-colors";
-            card.innerHTML = `
-                <div>
-                    <h3 class="text-xl font-bold text-accent-vibrant mb-2 font-oswald uppercase">${nombre}</h3>
-                    <p class="text-xs text-gray-400 mb-4">Estado: <span class="text-green-400">Activo</span></p>
-                </div>
-                <button onclick="openProgramViewer('${contentKey}')" class="w-full py-3 bg-white text-black font-bold uppercase text-sm rounded hover:bg-gray-200 transition-colors">
-                    ABRIR PROGRAMA
-                </button>
-            `;
-            grid.appendChild(card);
-        });
-    }
-}
-
-// ==========================================
-// 3. TIENDA Y BOTONES
-// ==========================================
-
-function setupStoreButtons() {
-    const buttons = document.querySelectorAll('button[data-plan-id]');
-    buttons.forEach(btn => {
-        const newBtn = btn.cloneNode(true);
-        btn.parentNode.replaceChild(newBtn, btn);
-
-        newBtn.addEventListener('click', (e) => {
-            const planId = newBtn.getAttribute('data-plan-id');
-            const realId = planId; 
-
-            // Verificamos si tiene el permiso (El admin ahora siempre tendrá 'true' aquí)
-            if (currentUser && userPurchases.has(realId)) {
-                openProgramViewer(realId);
-            } else {
-                if(currentUser) alert("Aún no tienes acceso a este nivel. ¡Cómpralo para desbloquear!");
-                else {
-                     alert("Inicia sesión para comprar.");
-                     login();
-                }
-            }
-        });
+      }
     });
+  });
+
+  // Hide level panels by default
+  document.querySelectorAll('.levels-panel').forEach(el => el.style.display = 'none');
+
+  // Close Fullscreen Button
+  const closeBtn = document.getElementById('close-fullscreen-btn');
+  if (closeBtn) {
+    closeBtn.addEventListener('click', closeFullscreenView);
+  }
 }
 
-// ==========================================
-// 4. VISOR DE PROGRAMA
-// ==========================================
+function closeFullscreenView() {
+  const view = document.getElementById('fullscreen-program-view');
+  view.classList.add('hidden');
+  view.classList.remove('translate-x-0');
+  view.classList.add('translate-x-full');
+}
 
-function openProgramViewer(planId) {
-    const content = PROGRAM_CONTENT[planId];
+// --- Auth Logic ---
 
-    if (!content) {
-        alert("El contenido de este programa se está cargando. Contacta a soporte.");
-        return;
+function login(email, password) {
+  if (email && password) {
+    // Updated requirement: edfmarcoflores@gmail.com is the ONLY superuser
+    const isSuperUser = email.toLowerCase() === 'edfmarcoflores@gmail.com';
+
+    const user = {
+      email,
+      name: email.includes('@') ? email.split('@')[0] : email,
+      id: Date.now(),
+      isAdmin: isSuperUser
+    };
+
+    if (isSuperUser) {
+      user.name = "Marco Flores";
     }
 
-    let daysHTML = '';
-    content.days.forEach(day => {
-        let exercisesHTML = '';
-        day.exercises.forEach(ex => {
-            exercisesHTML += `
-                <div class="bg-black p-5 rounded-xl flex flex-col md:flex-row items-start md:items-center gap-6 border border-gray-800 hover:border-accent-vibrant transition-all">
-                    <div class="w-16 h-16 bg-gray-800 rounded-lg flex items-center justify-center text-[10px] text-gray-500 font-mono">VIDEO</div>
-                    <div class="flex-1">
-                        <h4 class="font-bold text-lg text-white mb-1">${ex.name}</h4>
-                        <p class="text-sm text-gray-400">${ex.note}</p>
-                    </div>
-                    <div class="bg-gray-900 px-4 py-2 rounded border border-gray-700 text-center min-w-[100px]">
-                        <span class="block text-accent-vibrant font-bold text-xl font-oswald">${ex.sets} x ${ex.reps}</span>
-                    </div>
-                </div>
-            `;
-        });
+    state.user = user;
+    localStorage.setItem('currentUser', JSON.stringify(user));
 
-        daysHTML += `
-            <div class="mb-8">
-                <h3 class="text-2xl font-oswald uppercase text-white border-b border-gray-700 pb-2 mb-4">${day.name}</h3>
-                <div class="space-y-4">${exercisesHTML}</div>
-            </div>
-        `;
-    });
+    // Load purchases
+    let storedPurchases = [];
+    if (isSuperUser) {
+      // Admin gets EVERYTHING
+      storedPurchases = Object.keys(PROGRAMS_DATA);
+    } else {
+      const userStore = localStorage.getItem(`purchases_${email}`);
+      storedPurchases = userStore ? JSON.parse(userStore) : [];
 
-    const viewerHTML = `
-    <div id="program-viewer" class="fixed inset-0 z-[100] bg-black text-white overflow-y-auto animate-fade-in">
-        <div class="max-w-5xl mx-auto min-h-screen bg-gray-900 relative border-x border-gray-800 shadow-2xl">
-            <div class="sticky top-0 bg-black/95 backdrop-blur-md p-4 border-b border-gray-800 flex justify-between items-center z-50">
-                <h2 class="text-xl font-oswald text-accent-vibrant uppercase tracking-wider">${content.title}</h2>
-                <button onclick="document.getElementById('program-viewer').remove(); document.body.style.overflow='';" class="px-4 py-2 bg-white text-black font-bold text-xs rounded hover:bg-gray-300 transition-colors uppercase">✕ Cerrar</button>
-            </div>
-            <div class="p-6 md:p-12">
-                <div class="bg-gradient-to-r from-gray-800 to-gray-900 p-8 rounded-2xl border-l-4 border-accent-vibrant shadow-lg mb-10">
-                    <h1 class="text-3xl font-bold mb-3 font-oswald uppercase text-white">${content.phase}</h1>
-                    <p class="text-gray-300 text-lg">${content.desc}</p>
-                </div>
-                ${daysHTML}
-            </div>
+      // CRITICAL: Filter out junk/invalid programs
+      storedPurchases = storedPurchases.filter(id => PROGRAMS_DATA.hasOwnProperty(id));
+    }
+
+    state.purchases = storedPurchases;
+    localStorage.setItem('userPurchases', JSON.stringify(state.purchases));
+
+    closeModal();
+    renderHeader();
+    renderMyPrograms();
+
+    // Redirect to My Programs
+    const programsSection = document.getElementById('mis-programas');
+    if (programsSection) programsSection.scrollIntoView({ behavior: 'smooth' });
+
+  } else {
+    alert('Por favor ingresa email y contraseña.');
+  }
+}
+
+function logout() {
+  state.user = null;
+  state.purchases = [];
+  localStorage.removeItem('currentUser');
+  localStorage.removeItem('userPurchases');
+
+  renderHeader();
+  renderMyPrograms();
+
+  // Redirect to home
+  window.location.hash = '';
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+function register(name, email, password) {
+  if (name && email && password) {
+    // For demo, we just log them in with the name they provided
+    if (name === 'Marco Flores') {
+      login(name, password);
+    } else {
+      login(email, password);
+    }
+  } else {
+    alert('Todos los campos son obligatorios.');
+  }
+}
+
+// --- Purchase Logic ---
+
+function handlePurchase(planId) {
+  if (!state.user) {
+    openAuthModal();
+    return;
+  }
+
+  if (state.purchases.includes(planId)) {
+    alert('¡Ya tienes este programa! Revisa la sección "Mis Programas".');
+    const section = document.getElementById('mis-programas');
+    if (section) section.scrollIntoView({ behavior: 'smooth' });
+    return;
+  }
+
+  // Simulate purchase process
+  const confirmPurchase = confirm(`¿Confirmar compra de ${planId}? (Simulación)`);
+  if (confirmPurchase) {
+    state.purchases.push(planId);
+    localStorage.setItem('userPurchases', JSON.stringify(state.purchases));
+    // Also save to user specific storage
+    localStorage.setItem(`purchases_${state.user.email}`, JSON.stringify(state.purchases));
+
+    alert('¡Compra exitosa! El programa ha sido añadido a tu cuenta.');
+    renderMyPrograms();
+    const section = document.getElementById('mis-programas');
+    if (section) section.scrollIntoView({ behavior: 'smooth' });
+  }
+}
+
+// --- Rendering ---
+
+function renderHeader() {
+  const headerPlaceholder = document.getElementById('header-placeholder');
+  if (!headerPlaceholder) return;
+
+  let navContent = '';
+  if (state.user) {
+    navContent = `
+      <div class="flex items-center gap-4">
+        <span class="text-sm font-semibold hidden sm:inline">Hola, ${state.user.name} ${state.user.isAdmin ? '(Admin)' : ''}</span>
+        <button onclick="logout()" class="text-sm font-bold text-red-500 hover:text-red-600">Cerrar Sesión</button>
+        <a href="#mis-programas" class="px-4 py-2 rounded-lg bg-accent-vibrant text-black font-bold text-sm">Mis Programas</a>
+      </div>
+    `;
+  } else {
+    navContent = `
+      <button onclick="openAuthModal()" class="px-4 py-2 rounded-lg bg-primary-dark text-white font-bold text-sm hover:bg-gray-800">Iniciar Sesión / Registro</button>
+    `;
+  }
+
+  headerPlaceholder.innerHTML = `
+    <header class="bg-white shadow-sm sticky top-0 z-50">
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+        <div class="flex items-center gap-2">
+           <!-- Logo Placeholder -->
+           <div class="w-8 h-8 bg-black rounded-full flex items-center justify-center text-white font-oswald font-bold">RM</div>
+           <span class="font-oswald font-bold text-xl tracking-tighter">REPETICIÓN MÁXIMA</span>
         </div>
+        <nav>
+          ${navContent}
+        </nav>
+      </div>
+    </header>
+  `;
+}
+
+function renderMyPrograms() {
+  const grid = document.getElementById('mis-programas-grid');
+  if (!grid) return;
+
+  if (!state.user) {
+    grid.innerHTML = `
+      <div class="col-span-full text-center py-10 bg-gray-50 rounded-xl border border-dashed border-gray-300">
+        <p class="text-gray-500 mb-4">Inicia sesión para ver tus programas adquiridos.</p>
+        <button onclick="openAuthModal()" class="px-6 py-2 bg-primary-dark text-white rounded-lg font-bold">Ingresar</button>
+      </div>
+    `;
+    return;
+  }
+
+  if (state.purchases.length === 0) {
+    grid.innerHTML = `
+      <div class="col-span-full text-center py-10 bg-gray-50 rounded-xl border border-dashed border-gray-300">
+        <p class="text-gray-500 mb-4">Aún no tienes programas. ¡Explora la tienda!</p>
+        <a href="#programas" class="px-6 py-2 bg-accent-vibrant text-black rounded-lg font-bold">Ver Catálogo</a>
+      </div>
+    `;
+    return;
+  }
+
+  grid.innerHTML = state.purchases.map(planId => {
+    const program = PROGRAMS_DATA[planId] || { name: planId, description: 'Programa adquirido', image: 'hero_gym_dark.png', theme: 'default' };
+    const imgSrc = program.image || 'hero_gym_dark.png';
+    const themeClass = `theme-${program.theme || 'default'}`;
+
+    return `
+      <div class="program-card ${themeClass} bg-white rounded-xl shadow-lg overflow-hidden border border-gray-100 flex flex-col transform transition duration-300 hover:-translate-y-1 hover:shadow-2xl">
+        <div class="h-40 bg-gray-200 relative overflow-hidden group">
+           <img src="${imgSrc}" onerror="this.src='hero_gym_dark.png'" alt="${program.name}" class="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110 group-hover:brightness-110">
+           <div class="absolute inset-0 bg-black/30 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+             <button onclick="openProgramDetails('${planId}')" class="px-4 py-2 bg-white text-black font-bold rounded-full transform scale-90 group-hover:scale-100 transition">Ver Entrenamientos</button>
+           </div>
+        </div>
+        <div class="p-5 flex-1 flex flex-col relative content">
+          <div class="theme-accent-line absolute top-0 left-0 w-full h-1"></div>
+          <h3 class="font-bold text-lg mb-1 font-oswald uppercase tracking-wide">${program.name}</h3>
+          <p class="text-sm text-gray-600 mb-4 flex-1">${program.description}</p>
+          <button onclick="openProgramDetails('${planId}')" class="theme-btn w-full py-2 rounded-lg text-white font-bold text-sm transition hover:opacity-90">Acceder</button>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+function openProgramDetails(planId) {
+  const program = PROGRAMS_DATA[planId];
+  if (!program) {
+    alert('Detalles no disponibles para este programa.');
+    return;
+  }
+
+  // Handle External URL (e.g., Milon 2)
+  if (program.externalUrl && program.externalUrl !== '#') {
+    window.location.href = program.externalUrl;
+    return;
+  } else if (program.externalUrl === '#') {
+    alert('Este programa estará disponible próximamente.');
+    return;
+  }
+
+  const view = document.getElementById('fullscreen-program-view');
+  const content = document.getElementById('fullscreen-content');
+
+  if (!view || !content) return;
+
+  // Populate Content
+  content.innerHTML = `
+    <div class="animate-fade-in">
+      <div class="flex flex-col md:flex-row gap-8 mb-8">
+        <div class="md:w-1/3">
+           <img src="${program.image || 'hero_gym_dark.png'}" alt="${program.name}" class="w-full rounded-xl shadow-lg">
+        </div>
+        <div class="md:w-2/3">
+          <h1 class="text-4xl md:text-5xl font-extrabold font-oswald mb-4 text-primary-dark">${program.name}</h1>
+          <p class="text-xl text-gray-600 mb-6">${program.description}</p>
+          <div class="flex gap-4">
+             <span class="px-3 py-1 rounded-full bg-gray-100 text-gray-700 font-bold text-sm">Nivel 1</span>
+             <span class="px-3 py-1 rounded-full bg-gray-100 text-gray-700 font-bold text-sm">Duración: 4 Semanas</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="border-t pt-8">
+        <h2 class="text-3xl font-bold font-oswald mb-6">Plan de Entrenamiento - Semana 1</h2>
+        <div class="space-y-4">
+          ${program.exercises && program.exercises.length > 0 ? program.exercises.map(ex => `
+            <div class="exercise-item bg-gray-50 rounded-xl p-4 hover:bg-white hover:shadow-md transition">
+              <img src="${ex.image}" onerror="this.src='hero_gym_dark.png'" alt="${ex.name}" class="exercise-img shadow-sm">
+              <div class="flex-1">
+                <h4 class="text-xl font-bold text-primary-dark mb-1">${ex.name}</h4>
+                <p class="text-gray-500 text-sm mb-2">Enfoque en técnica y control.</p>
+                <div class="flex gap-4 text-sm text-gray-700">
+                  <span class="bg-white px-3 py-1 rounded border">Sets: <strong>${ex.sets}</strong></span>
+                  <span class="bg-white px-3 py-1 rounded border">Reps: <strong>${ex.reps}</strong></span>
+                </div>
+              </div>
+            </div>
+          `).join('') : '<p class="text-gray-500 italic">Contenido en desarrollo o disponible en formato PDF descargable.</p>'}
+        </div>
+      </div>
     </div>
     `;
-    
-    document.body.insertAdjacentHTML('beforeend', viewerHTML);
-    document.body.style.overflow = 'hidden';
+
+  view.classList.remove('hidden');
+  // Small delay to allow display:block to apply before transition
+  setTimeout(() => {
+    view.classList.remove('translate-x-full');
+    view.classList.add('translate-x-0');
+  }, 10);
 }
 
-// ==========================================
-// 5. EXTRAS
-// ==========================================
-
+// Mock Modal Functions
 function openAuthModal() {
-    if (!currentUser) { login(); return; }
-    if (currentUser.email === ADMIN_EMAIL) {
-        // PANEL DE PROFESOR SIMPLE
-        const dashHTML = `
-        <div id="teacher-dash" class="fixed inset-0 z-[100] bg-gray-900 text-white p-10 overflow-y-auto">
-            <div class="max-w-4xl mx-auto">
-                <div class="flex justify-between items-center mb-6">
-                    <h1 class="text-3xl font-oswald text-accent-vibrant">PANEL DE PROFESOR</h1>
-                    <button onclick="this.parentElement.parentElement.parentElement.remove()" class="bg-red-500 px-4 py-2 rounded font-bold">Cerrar</button>
-                </div>
-                <div class="bg-black p-6 rounded-xl border border-gray-800">
-                    <p class="text-gray-300 mb-4">Bienvenido, Marco. Aquí puedes gestionar tus alumnos.</p>
-                    <a href="https://supabase.com/dashboard/project/arwxqomdfquhkneufnnh/editor/29674" target="_blank" class="block w-full text-center bg-gray-800 hover:bg-gray-700 p-4 rounded text-white font-bold border border-gray-600">
-                        🔗 Ir a Base de Datos de Alumnos (Supabase)
-                    </a>
-                </div>
-            </div>
-        </div>`;
-        document.body.insertAdjacentHTML('beforeend', dashHTML);
-    } else {
-        alert("⛔ Acceso Denegado");
-    }
+  const modalPlaceholder = document.getElementById('modal-placeholder');
+  if (!modalPlaceholder) return;
+
+  modalPlaceholder.innerHTML = `
+    <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm animate-fade-in">
+      <div class="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-md relative">
+        <button onclick="closeModal()" class="absolute top-4 right-4 text-gray-400 hover:text-black">✕</button>
+        <h2 class="text-2xl font-bold mb-6 text-center">Iniciar Sesión</h2>
+        <div class="space-y-4">
+          <input type="text" id="login-email" placeholder="Email" class="w-full px-4 py-3 border rounded-lg">
+          <input type="password" id="login-password" placeholder="Contraseña" class="w-full px-4 py-3 border rounded-lg">
+          <button onclick="login(document.getElementById('login-email').value, document.getElementById('login-password').value)" class="w-full py-3 rounded-lg bg-primary-dark text-white font-bold">Entrar</button>
+        </div>
+        <p class="mt-4 text-center text-sm text-gray-500">¿No tienes cuenta? <a href="#" class="text-accent-vibrant font-bold">Regístrate</a></p>
+      </div>
+    </div>
+    `;
 }
 
-function generateQuickRoutine() {
-    const authors = [
-        { name: "John Meadows", text: "Drop sets y tensión constante." },
-        { name: "Mark Rippetoe", text: "5x5 Fuerza básica." }
-    ];
-    const sel = authors[Math.floor(Math.random()*authors.length)];
-    const res = document.getElementById('routine-res');
-    res.innerHTML = `<strong>${sel.name}</strong><br>${sel.text}`;
-    res.classList.remove('hidden');
+function closeModal() {
+  const modalPlaceholder = document.getElementById('modal-placeholder');
+  if (modalPlaceholder) modalPlaceholder.innerHTML = '';
 }
 
 function calc1RM() {
-     const p = document.getElementById('rm-peso').value;
-     const r = document.getElementById('rm-reps').value;
-     if(p && r) document.getElementById('rm-res').innerHTML = `1RM: <b>${Math.round(p*(1+r/30))} kg</b>`;
-     document.getElementById('rm-res').classList.remove('hidden');
+  const w = parseFloat(document.getElementById('rm-peso').value);
+  const r = parseInt(document.getElementById('rm-reps').value);
+  if (w && r) {
+    const rm = Math.round(w * (1 + r / 30));
+    document.getElementById('rm-res').innerHTML = `Tu 1RM estimado es: <strong>${rm} kg</strong>`;
+  }
+}
+
+function generateQuickRoutine() {
+  const routines = [
+    "Sentadilla 3x5, Press Banca 3x5, Remo Pendlay 3x8",
+    "Peso Muerto 1x5, Press Militar 3x5, Dominadas 3xFall",
+    "Sentadilla Frontal 3x8, Fondos 3x10, Curl Barra 3x12"
+  ];
+  const random = routines[Math.floor(Math.random() * routines.length)];
+  document.getElementById('routine-res').innerText = random;
 }
